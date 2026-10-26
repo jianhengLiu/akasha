@@ -1,0 +1,15 @@
+# Example: Akasha next to an existing Paperless-ngx stack.
+# Put Akasha on the same Docker network as Paperless so PAPERLESS_URL works.
+services:
+  akasha:
+    image: ghcr.io/jianhengliu/akasha:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3100:3000"
+    networks: [paperless]
+
+networks:
+  paperless:
+    external: true
+    name: paperless_default
