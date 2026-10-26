@@ -8,7 +8,6 @@ import { config } from "./config.ts";
 
 export interface Feedback {
   message: string;
-  kind?: string;
   page: string;
   route: string;
   lang?: string;
@@ -22,16 +21,6 @@ export interface FeedbackContext {
   userAgent: string;
 }
 
-const KINDS = new Set(["confusing", "too_small", "cant_find", "bug", "idea", "other"]);
-const KIND_LABELS: Record<string, string> = {
-  confusing: "看不懂",
-  too_small: "字或按钮太小",
-  cant_find: "找不到",
-  bug: "出错了",
-  idea: "建议",
-  other: "其他",
-};
-
 export function validate(input: unknown): Feedback | null {
   if (!input || typeof input !== "object") return null;
   const o = input as Record<string, unknown>;
@@ -39,10 +28,8 @@ export function validate(input: unknown): Feedback | null {
   const message = str(o.message, 4000);
   const page = str(o.page, 40).replace(/[^a-z0-9-]/gi, "");
   if (!message || !page) return null;
-  const kind = str(o.kind, 20);
   return {
     message,
-    kind: KINDS.has(kind) ? kind : "other",
     page,
     route: str(o.route, 200),
     lang: str(o.lang, 10),
@@ -53,11 +40,10 @@ export function validate(input: unknown): Feedback | null {
 }
 
 export function issueFor(f: Feedback, ctx: FeedbackContext) {
-  const kindLabel = KIND_LABELS[f.kind ?? "other"];
   const firstLine = f.message.split("\n")[0].slice(0, 60);
   return {
-    title: `[${f.page}] ${kindLabel}：${firstLine}`,
-    labels: ["feedback", `page:${f.page}`, `kind:${f.kind}`],
+    title: `[${f.page}] ${firstLine}`,
+    labels: ["feedback", `page:${f.page}`],
     body: [
       f.message,
       "",
@@ -66,7 +52,6 @@ export function issueFor(f: Feedback, ctx: FeedbackContext) {
       "| --- | --- |",
       `| 页面 | \`${f.page}\` |`,
       `| 路径 | \`${f.route || "/"}\` |`,
-      `| 类型 | ${kindLabel} |`,
       `| 用户 | ${ctx.username} |`,
       `| 语言 / 字号 | ${f.lang || "?"} / ${f.font || "?"} |`,
       `| 屏幕 | ${f.viewport || "?"} |`,

@@ -123,11 +123,11 @@ test("feedback is validated, labelled with its page and saved", async () => {
     method: "POST", headers: { cookie, "content-type": "application/json", "user-agent": "test-agent" }, body: JSON.stringify(body),
   }));
   assert.equal((await post({ message: "", page: "home" })).status, 400);
-  const ok = await post({ message: "按钮太小了\n第二行", kind: "too_small", page: "doc", route: "/doc/3", font: "xl" });
+  const ok = await post({ message: "按钮太小了\n第二行", page: "doc", route: "/doc/3", font: "xl" });
   assert.deepEqual(await ok.json(), { ok: true, via: "file" });
   const saved = JSON.parse((await readFile(`${config.dataDir}/feedback.jsonl`, "utf8")).trim());
-  assert.equal(saved.title, "[doc] 字或按钮太小：按钮太小了");
-  assert.deepEqual(saved.labels, ["feedback", "page:doc", "kind:too_small"]);
+  assert.equal(saved.title, "[doc] 按钮太小了");
+  assert.deepEqual(saved.labels, ["feedback", "page:doc"]);
   assert.match(saved.body, /\| 路径 \| `\/doc\/3` \|/);
   assert.match(saved.body, /\| 用户 \| mama \|/);
 });

@@ -2,9 +2,7 @@ import { useState } from "react";
 import { api } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
 import { useApp } from "../lib/prefs.ts";
-import { BigButton, Chip } from "./ui.tsx";
-
-const KINDS = ["confusing", "too_small", "cant_find", "bug", "idea", "other"] as const;
+import { BigButton } from "./ui.tsx";
 
 // A floating "suggest" button on every signed-in page. Feedback is sent with
 // the page name and route so it can be traced back to the screen.
@@ -12,7 +10,6 @@ export function Feedback({ page, route }: { page: string; route: string }) {
   const t = useT();
   const { prefs } = useApp();
   const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<(typeof KINDS)[number]>("other");
   const [message, setMessage] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent" | "error">("idle");
 
@@ -20,7 +17,6 @@ export function Feedback({ page, route }: { page: string; route: string }) {
     setOpen(false);
     if (state === "sent") {
       setMessage("");
-      setKind("other");
       setState("idle");
     }
   }
@@ -30,7 +26,6 @@ export function Feedback({ page, route }: { page: string; route: string }) {
     try {
       await api.feedback({
         message: message.trim(),
-        kind,
         page,
         route,
         lang: prefs.lang,
@@ -71,11 +66,6 @@ export function Feedback({ page, route }: { page: string; route: string }) {
             ) : (
               <div className="space-y-4">
                 <h2 className="text-2xl font-bold">{t.feedbackTitle}</h2>
-                <div className="flex flex-wrap gap-2">
-                  {KINDS.map((k) => (
-                    <Chip key={k} selected={kind === k} onClick={() => setKind(k)}>{t.feedbackKinds[k]}</Chip>
-                  ))}
-                </div>
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
