@@ -1,0 +1,40 @@
+// All settings come from environment variables so the same image works for
+// any family. See .env.example for descriptions.
+
+function env(name: string, fallback?: string): string {
+  const v = process.env[name];
+  if (v !== undefined && v !== "") return v;
+  if (fallback !== undefined) return fallback;
+  throw new Error(`Missing required environment variable ${name}`);
+}
+
+export const config = {
+  port: Number(env("PORT", "3000")),
+  paperlessUrl: env("PAPERLESS_URL", "http://localhost:8001"),
+  secret: env("AKASHA_SECRET", process.env.NODE_ENV === "production" ? undefined : "dev-secret-change-me"),
+  // Family members are Paperless tags named with this prefix, e.g. "家人/妈妈".
+  peoplePrefix: env("AKASHA_PEOPLE_PREFIX", "家人/"),
+  // Name of the Paperless date custom field used for renewals and expiry.
+  expiryField: env("AKASHA_EXPIRY_FIELD", "到期日"),
+  // Categories created by "first-time setup". Comma separated.
+  defaultCategories: env("AKASHA_DEFAULT_CATEGORIES", "保险,证件,医疗,房产,车辆,票据,其他")
+    .split(",").map((s) => s.trim()).filter(Boolean),
+  defaultPeople: env("AKASHA_DEFAULT_PEOPLE", "爸爸,妈妈")
+    .split(",").map((s) => s.trim()).filter(Boolean),
+  // Paperless group that every approved family member joins; everything
+  // saved through Akasha is shared with it.
+  familyGroup: env("AKASHA_FAMILY_GROUP", "家人"),
+  staticDir: env("AKASHA_STATIC_DIR", "web/dist"),
+  dataDir: env("AKASHA_DATA_DIR", "data"),
+  // In-app feedback becomes GitHub issues when both are set; otherwise it is
+  // saved to <dataDir>/feedback.jsonl.
+  githubToken: process.env.AKASHA_GITHUB_TOKEN ?? "",
+  feedbackRepo: process.env.AKASHA_FEEDBACK_REPO ?? "",
+  // Optional AI reading of photos. Any OpenAI-compatible chat completions API
+  // with a vision model works (Qwen-VL, GPT-4o, a self-hosted model …).
+  aiBaseUrl: (process.env.AKASHA_AI_BASE_URL ?? "").replace(/\/+$/, ""),
+  aiApiKey: process.env.AKASHA_AI_API_KEY ?? "",
+  aiModel: process.env.AKASHA_AI_MODEL ?? "",
+  // "chat" (/chat/completions, default) or "responses" (/responses).
+  aiWireApi: process.env.AKASHA_AI_WIRE_API === "responses" ? "responses" : "chat",
+};

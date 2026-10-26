@@ -1,0 +1,62 @@
+# Paperless-ngx + Akasha on one machine. Copy .env.example to .env first and
+# fill in the values marked "required". See README "Self-hosting".
+services:
+  broker:
+    image: docker.io/library/redis:7.2-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+
+  db:
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: paperless
+      POSTGRES_PASSWORD: ${PAPERLESS_DBPASS}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    restart: unless-stopped
+    depends_on: [db, broker]
+    ports:
+      - "8000:8000"
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_DBHOST: db
+      PAPERLESS_DBPASS: ${PAPERLESS_DBPASS}
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY}
+      PAPERLESS_URL: ${PAPERLESS_PUBLIC_URL:-http://localhost:8000}
+      PAPERLESS_ADMIN_USER: ${PAPERLESS_ADMIN_USER}
+      PAPERLESS_ADMIN_PASSWORD: ${PAPERLESS_ADMIN_PASSWORD}
+      PAPERLESS_TIME_ZONE: ${TZ:-Asia/Shanghai}
+      # Simplified Chinese OCR. The image installs the language pack at start
+      # (needs internet); see README for an offline alternative.
+      PAPERLESS_OCR_LANGUAGES: chi-sim
+      PAPERLESS_OCR_LANGUAGE: chi_sim+eng
+    volumes:
+      - paperless-data:/usr/src/paperless/data
+      - paperless-media:/usr/src/paperless/media
+
+  akasha:
+    image: ghcr.io/jianhengliu/akasha:latest
+    restart: unless-stopped
+    depends_on: [paperless]
+    env_file: .env
+    environment:
+      PAPERLESS_URL: http://paperless:8000
+    ports:
+      - "3100:3000"
+    volumes:
+      # A named volume: the container runs as uid 1000, and a bind-mounted
+      # host folder is often not writable for it.
+      - akasha-data:/data
+
+volumes:
+  redisdata:
+  pgdata:
+  paperless-data:
+  paperless-media:
+  akasha-data:

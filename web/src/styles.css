@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #f6f1e7;
+  --color-card: #fffdf9;
+  --color-ink: #2a2520;
+  --color-muted: #6f665b;
+  --color-line: #e6dccb;
+  --color-brand: #b5532f;
+  --color-brand-dark: #93401f;
+  --color-warn: #b45309;
+  --color-danger: #b42318;
+  --color-ok: #2f7a4f;
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+}
+
+/* Text size is set on <html> so every rem-based size scales with it. */
+html { font-size: 18px; -webkit-text-size-adjust: 100%; }
+html[data-font="large"] { font-size: 21px; }
+html[data-font="xl"] { font-size: 24px; }
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid var(--color-brand); outline-offset: 2px; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-paper: #1d1a17;
+    --color-card: #28241f;
+    --color-ink: #f3ece1;
+    --color-muted: #b6aa99;
+    --color-line: #3d362e;
+    --color-brand: #e07a52;
+    --color-brand-dark: #f09a76;
+  }
+}
