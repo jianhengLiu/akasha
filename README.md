@@ -26,6 +26,7 @@ The name comes from Ākāśagarbha (虚空藏菩萨), the bodhisattva whose name
 - Expiry dates with "N days left" badges, editable on the document page
 - Chinese and English UI
 - Installable to the home screen (PWA)
+- A "Feedback" button on every page; feedback becomes a GitHub issue labelled `page:<name>` with the route, text size and screen size (or is saved to a file if no token is set)
 - Every request runs with the user's own Paperless token, so Paperless permissions apply
 
 Planned: AI extraction of policy numbers and dates, WeChat reminders, AI Q&A over your documents.

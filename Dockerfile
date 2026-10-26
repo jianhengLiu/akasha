@@ -7,8 +7,10 @@ COPY . .
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
-ENV NODE_ENV=production PORT=3000
+ENV NODE_ENV=production PORT=3000 AKASHA_DATA_DIR=/data
 WORKDIR /app
+RUN mkdir -p /data && chown node:node /data
+VOLUME /data
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/web/dist ./web/dist
 COPY package.json ./

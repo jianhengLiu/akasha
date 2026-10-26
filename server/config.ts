@@ -22,4 +22,9 @@ export const config = {
   defaultPeople: env("AKASHA_DEFAULT_PEOPLE", "爸爸,妈妈")
     .split(",").map((s) => s.trim()).filter(Boolean),
   staticDir: env("AKASHA_STATIC_DIR", "web/dist"),
+  dataDir: env("AKASHA_DATA_DIR", "data"),
+  // In-app feedback becomes GitHub issues when both are set; otherwise it is
+  // saved to <dataDir>/feedback.jsonl.
+  githubToken: process.env.AKASHA_GITHUB_TOKEN ?? "",
+  feedbackRepo: process.env.AKASHA_FEEDBACK_REPO ?? "",
 };

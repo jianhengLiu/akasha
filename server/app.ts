@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
 import { config } from "./config.ts";
 import { ensureDefaults, listDocs, loadMeta, patchDoc, toDetail } from "./family.ts";
+import { allow, submitFeedback, validate } from "./feedback.ts";
 import { Paperless, PaperlessError } from "./paperless.ts";
 import type { PDocument } from "./paperless.ts";
 
@@ -144,6 +145,15 @@ export function createApp() {
     }
     const task = await c.var.paperless.json<string>("/api/documents/post_document/", { method: "POST", body: out });
     return c.json({ taskId: task });
+  });
+
+  app.post("/api/feedback", async (c) => {
+    const f = validate(await c.req.json().catch(() => null));
+    if (!f) return c.json({ error: "invalid" }, 400);
+    const s = await c.var.paperless.json<{ user: { username: string } }>("/api/ui_settings/");
+    if (!allow(s.user.username)) return c.json({ error: "rate_limited" }, 429);
+    const result = await submitFeedback(f, { username: s.user.username, userAgent: c.req.header("user-agent") ?? "" });
+    return c.json({ ok: true, via: result.via });
   });
 
   app.get("/api/tasks/:id", async (c) => {

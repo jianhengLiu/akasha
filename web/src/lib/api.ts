@@ -65,6 +65,7 @@ export const api = {
   patchDoc: (id: number, patch: Partial<{ title: string; category: number | null; people: number[]; expiry: string | null }>) =>
     call<DocDetail>(`/api/docs/${id}`, jsonInit("PATCH", patch)),
   upload: (form: FormData) => call<{ taskId: string }>("/api/docs", { method: "POST", body: form }),
+  feedback: (body: Record<string, string>) => call<{ ok: true; via: string }>("/api/feedback", jsonInit("POST", body)),
   task: (id: string) => call<{ status: string; docId: number | null }>(`/api/tasks/${encodeURIComponent(id)}`),
 };
 

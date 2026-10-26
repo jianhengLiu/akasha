@@ -6,7 +6,7 @@ import { useT } from "../lib/i18n.ts";
 import { back, href } from "../lib/router.ts";
 
 export function Page({ children }: { children: ReactNode }) {
-  return <main className="mx-auto w-full max-w-xl px-4 pb-16 pt-4">{children}</main>;
+  return <main className="mx-auto w-full max-w-xl px-4 pb-28 pt-4">{children}</main>;
 }
 
 export function TopBar({ title, right }: { title?: string; right?: ReactNode }) {

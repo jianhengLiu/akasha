@@ -111,3 +111,23 @@ test("setup is admin-only and idempotent", async () => {
   assert.deepEqual((await (await run()).json()).created, ["person:外婆"]);
   assert.deepEqual((await (await run()).json()).created, []);
 });
+
+test("feedback is validated, labelled with its page and saved", async () => {
+  const { mkdtemp, readFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { config } = await import("../server/config.ts");
+  config.dataDir = await mkdtemp(`${tmpdir()}/akasha-`);
+  config.githubToken = "";
+  const { cookie } = await login("mama");
+  const post = (body: unknown) => app.fetch(new Request("http://x/api/feedback", {
+    method: "POST", headers: { cookie, "content-type": "application/json", "user-agent": "test-agent" }, body: JSON.stringify(body),
+  }));
+  assert.equal((await post({ message: "", page: "home" })).status, 400);
+  const ok = await post({ message: "按钮太小了\n第二行", kind: "too_small", page: "doc", route: "/doc/3", font: "xl" });
+  assert.deepEqual(await ok.json(), { ok: true, via: "file" });
+  const saved = JSON.parse((await readFile(`${config.dataDir}/feedback.jsonl`, "utf8")).trim());
+  assert.equal(saved.title, "[doc] 字或按钮太小：按钮太小了");
+  assert.deepEqual(saved.labels, ["feedback", "page:doc", "kind:too_small"]);
+  assert.match(saved.body, /\| 路径 \| `\/doc\/3` \|/);
+  assert.match(saved.body, /\| 用户 \| mama \|/);
+});

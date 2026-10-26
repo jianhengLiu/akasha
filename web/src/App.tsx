@@ -6,6 +6,7 @@ import { AppContext, loadPrefs, savePrefs } from "./lib/prefs.ts";
 import type { Prefs } from "./lib/prefs.ts";
 import { useRoute } from "./lib/router.ts";
 import { Loading } from "./components/ui.tsx";
+import { Feedback } from "./components/Feedback.tsx";
 import { Login } from "./pages/Login.tsx";
 import { Home } from "./pages/Home.tsx";
 import { DocList } from "./pages/DocList.tsx";
@@ -63,20 +64,28 @@ export function App() {
   }, [session, prefs, setPrefs]);
 
   let page;
+  let pageName = "home";
   if (session.status === "loading") page = <Loading />;
   else if (!state) page = <Login onDone={load} />;
   else {
     const docMatch = route.path.match(/^\/doc\/(\d+)$/);
-    if (docMatch) page = <DocDetailPage id={Number(docMatch[1])} />;
-    else if (route.path === "/list") page = <DocList params={route.params} />;
-    else if (route.path === "/upload") page = <Upload params={route.params} />;
-    else if (route.path === "/settings") page = <Settings onLogout={() => setSession({ status: "anon" })} />;
+    if (docMatch) [pageName, page] = ["doc", <DocDetailPage id={Number(docMatch[1])} />];
+    else if (route.path === "/list") [pageName, page] = ["list", <DocList params={route.params} />];
+    else if (route.path === "/upload") [pageName, page] = ["upload", <Upload params={route.params} />];
+    else if (route.path === "/settings") [pageName, page] = ["settings", <Settings onLogout={() => setSession({ status: "anon" })} />];
     else page = <Home />;
   }
 
   return (
     <I18nContext.Provider value={t}>
-      {state ? <AppContext.Provider value={state}>{page}</AppContext.Provider> : page}
+      {state ? (
+        <AppContext.Provider value={state}>
+          {page}
+          <Feedback page={pageName} route={`${route.path}${route.params.size ? `?${route.params}` : ""}`} />
+        </AppContext.Provider>
+      ) : (
+        page
+      )}
     </I18nContext.Provider>
   );
 }

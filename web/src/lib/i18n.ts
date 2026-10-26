@@ -60,6 +60,13 @@ const zh = {
   resultsFor: (q: string) => `“${q}”的结果`,
   count: (n: number) => `共 ${n} 份`,
   added: "存入时间",
+  feedback: "提意见",
+  feedbackTitle: "哪里不好用？告诉我们",
+  feedbackPlaceholder: "比如：这个按钮我看不懂",
+  feedbackKinds: { confusing: "看不懂", too_small: "字或按钮太小", cant_find: "找不到", bug: "出错了", idea: "有个建议", other: "其他" },
+  feedbackThanks: "收到了，谢谢！",
+  send: "发送",
+  close: "关闭",
 };
 
 export type Dict = typeof zh;
@@ -124,6 +131,13 @@ const en: Dict = {
   resultsFor: (q: string) => `Results for “${q}”`,
   count: (n: number) => `${n} items`,
   added: "Added",
+  feedback: "Feedback",
+  feedbackTitle: "What isn't working? Tell us",
+  feedbackPlaceholder: "e.g. I don't understand this button",
+  feedbackKinds: { confusing: "Confusing", too_small: "Too small", cant_find: "Can't find it", bug: "Something broke", idea: "Idea", other: "Other" },
+  feedbackThanks: "Got it, thank you!",
+  send: "Send",
+  close: "Close",
 };
 
 export const dictionaries = { zh, en };
