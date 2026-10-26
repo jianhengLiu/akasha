@@ -65,6 +65,29 @@ export function createMock() {
   const tasks = new Map<string, { status: string; related_document: string | null }>();
   const app = new Hono<{ Variables: { user: (typeof users)[number] } }>();
 
+  // Stand-in for an OpenAI-compatible vision model (AKASHA_AI_BASE_URL=<mock>/v1).
+  app.post("/v1/chat/completions", async (c) => {
+    if (c.req.header("authorization") !== "Bearer test-key") return c.json({ error: { message: "bad key" } }, 401);
+    const b = await c.req.json();
+    const parts = b.messages?.[0]?.content ?? [];
+    const hasImage = parts.some((p: { type: string; image_url?: { url?: string } }) => p.type === "image_url" && p.image_url?.url?.startsWith("data:image/"));
+    if (!hasImage) return c.json({ error: { message: "no image" } }, 400);
+    const reply = {
+      title: "妈妈 医疗险保单",
+      people: ["妈妈", "隔壁老王"],
+      category: "保险",
+      expiry: daysFromNow(200),
+      details: [
+        { label: "保险公司", value: "中国太平洋保险" },
+        { label: "被保险人", value: "王**" },
+        { label: "保单号", value: "CPIC2026****0417" },
+        { label: "年保费", value: "1,560 元" },
+      ],
+      text: "中国太平洋保险\n个人医疗保险单\n被保险人 王**\n保单号 CPIC2026****0417",
+    };
+    return c.json({ choices: [{ message: { role: "assistant", content: "```json\n" + JSON.stringify(reply) + "\n```" } }] });
+  });
+
   app.post("/api/token/", async (c) => {
     const { username, password } = await c.req.json();
     const u = users.find((x) => x.username === username && x.password === password);

@@ -12,6 +12,9 @@ before(async () => {
   mockServer = serve({ fetch: createMock().fetch, port: 0 });
   await new Promise((r) => mockServer.once("listening", r));
   process.env.PAPERLESS_URL = `http://localhost:${(mockServer.address() as AddressInfo).port}`;
+  process.env.AKASHA_AI_BASE_URL = `${process.env.PAPERLESS_URL}/v1`;
+  process.env.AKASHA_AI_API_KEY = "test-key";
+  process.env.AKASHA_AI_MODEL = "mock-vision";
   const { createApp } = await import("../server/app.ts");
   app = createApp();
 });
@@ -130,4 +133,37 @@ test("feedback is validated, labelled with its page and saved", async () => {
   assert.deepEqual(saved.labels, ["feedback", "page:doc"]);
   assert.match(saved.body, /\| 路径 \| `\/doc\/3` \|/);
   assert.match(saved.body, /\| 用户 \| mama \|/);
+});
+
+test("AI reads a photo into suggested fields, and content can be saved", async () => {
+  const { cookie } = await login("mama");
+  const me = await (await get("/api/me", cookie)).json();
+  assert.equal(me.ai, true);
+  const meta = await (await get("/api/meta", cookie)).json();
+
+  const form = new FormData();
+  form.append("file", new File([new Uint8Array([0xff, 0xd8, 0xff])], "p.jpg", { type: "image/jpeg" }));
+  const res = await app.fetch(new Request("http://x/api/ai/extract", { method: "POST", headers: { cookie }, body: form }));
+  assert.equal(res.status, 200);
+  const ex = await res.json();
+  assert.equal(ex.title, "妈妈 医疗险保单");
+  // Unknown names are dropped; only real family members are kept.
+  assert.deepEqual(ex.people, [meta.people.find((p: { name: string }) => p.name === "妈妈").id]);
+  assert.equal(ex.category, meta.categories.find((c: { name: string }) => c.name === "保险").id);
+  assert.match(ex.expiry, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(ex.content, /^保险公司：中国太平洋保险\n/);
+
+  const pdf = new FormData();
+  pdf.append("file", new File(["%PDF"], "a.pdf", { type: "application/pdf" }));
+  const bad = await app.fetch(new Request("http://x/api/ai/extract", { method: "POST", headers: { cookie }, body: pdf }));
+  assert.equal(bad.status, 400);
+
+  const patched = await app.fetch(new Request("http://x/api/docs/1", {
+    method: "PATCH",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ content: ex.content, expiry: ex.expiry }),
+  }));
+  const doc = await patched.json();
+  assert.equal(doc.content, ex.content);
+  assert.equal(doc.expiry, ex.expiry);
 });

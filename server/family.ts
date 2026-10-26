@@ -108,6 +108,7 @@ export interface DocPatch {
   category?: number | null;
   people?: number[];
   expiry?: string | null;
+  content?: string;
 }
 
 export async function patchDoc(p: Paperless, id: number, patch: DocPatch) {
@@ -116,6 +117,7 @@ export async function patchDoc(p: Paperless, id: number, patch: DocPatch) {
   const body: Record<string, unknown> = {};
   if (patch.title !== undefined) body.title = patch.title;
   if (patch.category !== undefined) body.document_type = patch.category;
+  if (typeof patch.content === "string") body.content = patch.content.slice(0, 100_000);
   if (patch.people !== undefined) {
     const personIds = new Set(meta.people.map((x) => x.id));
     body.tags = [...current.tags.filter((t) => !personIds.has(t)), ...patch.people];

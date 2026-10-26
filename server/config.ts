@@ -27,4 +27,9 @@ export const config = {
   // saved to <dataDir>/feedback.jsonl.
   githubToken: process.env.AKASHA_GITHUB_TOKEN ?? "",
   feedbackRepo: process.env.AKASHA_FEEDBACK_REPO ?? "",
+  // Optional AI reading of photos. Any OpenAI-compatible chat completions API
+  // with a vision model works (Qwen-VL, GPT-4o, a self-hosted model …).
+  aiBaseUrl: (process.env.AKASHA_AI_BASE_URL ?? "").replace(/\/+$/, ""),
+  aiApiKey: process.env.AKASHA_AI_API_KEY ?? "",
+  aiModel: process.env.AKASHA_AI_MODEL ?? "",
 };

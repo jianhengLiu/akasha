@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
+import { AiError, aiEnabled, extract } from "./ai.ts";
 import { config } from "./config.ts";
 import { ensureDefaults, listDocs, loadMeta, patchDoc, toDetail } from "./family.ts";
 import { allow, submitFeedback, validate } from "./feedback.ts";
@@ -9,6 +10,7 @@ import type { PDocument } from "./paperless.ts";
 
 const COOKIE = "akasha_session";
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_AI_IMAGE_BYTES = 8 * 1024 * 1024;
 
 type Env = { Variables: { paperless: Paperless } };
 
@@ -78,6 +80,7 @@ export function createApp() {
       username: s.user.username,
       displayName: profile.first_name?.trim() || s.user.username,
       isAdmin: !!s.user.is_superuser,
+      ai: aiEnabled(),
     });
   });
 
@@ -145,6 +148,25 @@ export function createApp() {
     }
     const task = await c.var.paperless.json<string>("/api/documents/post_document/", { method: "POST", body: out });
     return c.json({ taskId: task });
+  });
+
+  // Reads a (client-downscaled) photo with the configured vision model and
+  // returns suggested fields. Nothing is saved; the user confirms first.
+  app.post("/api/ai/extract", async (c) => {
+    if (!aiEnabled()) return c.json({ error: "ai_disabled" }, 404);
+    const form = await c.req.formData();
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.type.startsWith("image/")) return c.json({ error: "missing_image" }, 400);
+    if (file.size > MAX_AI_IMAGE_BYTES) return c.json({ error: "too_large" }, 413);
+    try {
+      return c.json(await extract(file, await loadMeta(c.var.paperless)));
+    } catch (e) {
+      if (e instanceof AiError || (e instanceof Error && (e.name === "TimeoutError" || e instanceof SyntaxError))) {
+        console.warn("ai extract failed:", e.message);
+        return c.json({ error: "ai_failed" }, 502);
+      }
+      throw e;
+    }
   });
 
   app.post("/api/feedback", async (c) => {
