@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
+import { approveSignup, ensureFamilyGroup, listSignups, rejectSignup, requestSignup, shareDoc, shareEverything } from "./accounts.ts";
 import { AiError, aiEnabled, extract } from "./ai.ts";
 import { config } from "./config.ts";
 import { ensureDefaults, listDocs, loadMeta, patchDoc, toDetail } from "./family.ts";
@@ -57,6 +58,14 @@ export function createApp() {
     }
   });
 
+  // Public: anyone can ask for an account; an admin approves it in Settings.
+  app.post("/api/signup", async (c) => {
+    const ip = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0].trim() ?? "local";
+    if (!allow(`signup:${ip}`, Date.now(), 5)) return c.json({ error: "rate_limited" }, 429);
+    const error = await requestSignup(await c.req.json().catch(() => ({})));
+    return error ? c.json({ error }, 400) : c.json({ ok: true });
+  });
+
   app.post("/api/auth/logout", (c) => {
     deleteCookie(c, COOKIE, { path: "/" });
     return c.json({ ok: true });
@@ -84,12 +93,35 @@ export function createApp() {
     });
   });
 
+  async function isAdmin(p: Paperless) {
+    const s = await p.json<{ user: { is_superuser?: boolean } }>("/api/ui_settings/");
+    return !!s.user.is_superuser;
+  }
+
+  app.get("/api/signups", async (c) => {
+    if (!(await isAdmin(c.var.paperless))) return c.json({ error: "forbidden" }, 403);
+    return c.json(await listSignups());
+  });
+
+  app.post("/api/signups/:id/approve", async (c) => {
+    if (!(await isAdmin(c.var.paperless))) return c.json({ error: "forbidden" }, 403);
+    const r = await approveSignup(c.var.paperless, c.req.param("id"));
+    if (r.ok) return c.json(r);
+    return c.json(r, r.error === "not_found" ? 404 : 400);
+  });
+
+  app.delete("/api/signups/:id", async (c) => {
+    if (!(await isAdmin(c.var.paperless))) return c.json({ error: "forbidden" }, 403);
+    return (await rejectSignup(c.req.param("id"))) ? c.json({ ok: true }) : c.json({ error: "not_found" }, 404);
+  });
+
   app.get("/api/meta", async (c) => c.json(await loadMeta(c.var.paperless)));
 
   app.post("/api/setup", async (c) => {
     const body = await c.req.json<{ people?: string[] }>().catch(() => ({}) as { people?: string[] });
     const people = body.people?.map((s) => s.trim()).filter(Boolean);
     const created = await ensureDefaults(c.var.paperless, people?.length ? people : undefined);
+    await shareEverything(c.var.paperless, await ensureFamilyGroup(c.var.paperless));
     return c.json({ created, meta: await loadMeta(c.var.paperless) });
   });
 
@@ -184,7 +216,10 @@ export function createApp() {
     );
     const t = tasks[0];
     if (!t) return c.json({ status: "PENDING", docId: null });
-    return c.json({ status: t.status, docId: t.related_document ? Number(t.related_document) : null });
+    const docId = t.related_document ? Number(t.related_document) : null;
+    // New documents belong to the uploader only; share them with the family.
+    if (t.status === "SUCCESS" && docId) await shareDoc(c.var.paperless, docId).catch((e) => console.warn("share failed:", e.message));
+    return c.json({ status: t.status, docId });
   });
 
   return app;

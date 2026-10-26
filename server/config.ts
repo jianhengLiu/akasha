@@ -21,6 +21,9 @@ export const config = {
     .split(",").map((s) => s.trim()).filter(Boolean),
   defaultPeople: env("AKASHA_DEFAULT_PEOPLE", "爸爸,妈妈")
     .split(",").map((s) => s.trim()).filter(Boolean),
+  // Paperless group that every approved family member joins; everything
+  // saved through Akasha is shared with it.
+  familyGroup: env("AKASHA_FAMILY_GROUP", "家人"),
   staticDir: env("AKASHA_STATIC_DIR", "web/dist"),
   dataDir: env("AKASHA_DATA_DIR", "data"),
   // In-app feedback becomes GitHub issues when both are set; otherwise it is

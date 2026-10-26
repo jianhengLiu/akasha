@@ -3,6 +3,8 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { serve } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { createMock } from "../mock/paperless-mock.ts";
 
 let mockServer: ReturnType<typeof serve>;
@@ -15,6 +17,7 @@ before(async () => {
   process.env.AKASHA_AI_BASE_URL = `${process.env.PAPERLESS_URL}/v1`;
   process.env.AKASHA_AI_API_KEY = "test-key";
   process.env.AKASHA_AI_MODEL = "mock-vision";
+  process.env.AKASHA_DATA_DIR = await mkdtemp(`${tmpdir()}/akasha-`);
   const { createApp } = await import("../server/app.ts");
   app = createApp();
 });
@@ -116,8 +119,7 @@ test("setup is admin-only and idempotent", async () => {
 });
 
 test("feedback is validated, labelled with its page and saved", async () => {
-  const { mkdtemp, readFile } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
+  const { readFile } = await import("node:fs/promises");
   const { config } = await import("../server/config.ts");
   config.dataDir = await mkdtemp(`${tmpdir()}/akasha-`);
   config.githubToken = "";
@@ -166,4 +168,42 @@ test("AI reads a photo into suggested fields, and content can be saved", async (
   const doc = await patched.json();
   assert.equal(doc.content, ex.content);
   assert.equal(doc.expiry, ex.expiry);
+});
+
+test("account requests wait for an admin, then join the family group", async () => {
+  const signup = (body: unknown) => app.fetch(new Request("http://x/api/signup", {
+    method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": "10.0.0.9" }, body: JSON.stringify(body),
+  }));
+  assert.deepEqual(await (await signup({ name: "爸爸", username: "baba", password: "12345678" })).json(), { error: "weak_password" });
+  assert.equal((await signup({ name: "爸爸", username: "baba", password: "baba-2026!" })).status, 200);
+  assert.deepEqual(await (await signup({ name: "爸爸", username: "BABA", password: "another-pass" })).json(), { error: "taken" });
+
+  const mama = await login("mama");
+  assert.equal((await get("/api/signups", mama.cookie)).status, 403);
+  const admin = await login("admin");
+  const list = await (await get("/api/signups", admin.cookie)).json();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].username, "baba");
+  assert.equal(list[0].password, undefined);
+  assert.equal((await login("baba", "baba-2026!")).res.status, 401);
+
+  const approved = await app.fetch(new Request(`http://x/api/signups/${list[0].id}/approve`, { method: "POST", headers: { cookie: admin.cookie } }));
+  assert.equal(approved.status, 200);
+  const baba = await login("baba", "baba-2026!");
+  assert.equal(baba.res.status, 200);
+  assert.deepEqual(await (await get("/api/signups", admin.cookie)).json(), []);
+
+  // Setup shares existing documents and metadata with the family group;
+  // new uploads are shared once Paperless has processed them.
+  await app.fetch(new Request("http://x/api/setup", { method: "POST", headers: { cookie: admin.cookie, "content-type": "application/json" }, body: "{}" }));
+  const form = new FormData();
+  form.append("file", new File(["x"], "new.jpg", { type: "image/jpeg" }));
+  const { taskId } = await (await app.fetch(new Request("http://x/api/docs", { method: "POST", headers: { cookie: baba.cookie }, body: form }))).json();
+  const task = await (await get(`/api/tasks/${taskId}`, baba.cookie)).json();
+  const perms = await (await fetch(`${process.env.PAPERLESS_URL}/api/_perms/`, { headers: { authorization: "Token tok-admin" } })).json();
+  const family = { view: { users: [], groups: [1] }, change: { users: [], groups: [1] } };
+  assert.deepEqual(perms["documents:1"], family);
+  assert.deepEqual(perms[`documents:${task.docId}`], family);
+  assert.deepEqual(perms["document_types:1"], family);
+  assert.ok(Object.keys(perms).some((k) => k.startsWith("tags:")));
 });

@@ -26,10 +26,13 @@ function daysFromNow(n: number): string {
 }
 
 export function createMock() {
-  const users = [
+  const users: { id: number; username: string; first_name: string; password: string; is_superuser: boolean; token: string; groups?: number[] }[] = [
     { id: 1, username: "admin", first_name: "建恒", password: "admin", is_superuser: true, token: "tok-admin" },
     { id: 2, username: "mama", first_name: "妈妈", password: "mama", is_superuser: false, token: "tok-mama" },
   ];
+  const groups: { id: number; name: string; permissions: string[] }[] = [];
+  // Object permissions as last set by set_permissions, keyed "kind:id".
+  const perms = new Map<string, unknown>();
   const tags = [
     { id: 1, name: "家人/爸爸" },
     { id: 2, name: "家人/妈妈" },
@@ -119,8 +122,10 @@ export function createMock() {
   app.get("/api/custom_fields/", (c) => c.json(paged(fields)));
   app.post("/api/tags/", async (c) => {
     if (adminOnly(c)) return c.json({ detail: "forbidden" }, 403);
-    const t = { id: tags.length + 1, name: (await c.req.json()).name };
+    const b = await c.req.json();
+    const t = { id: tags.length + 1, name: b.name };
     tags.push(t);
+    if (b.set_permissions) perms.set(`tags:${t.id}`, b.set_permissions);
     return c.json(t, 201);
   });
   app.post("/api/document_types/", async (c) => {
@@ -136,6 +141,45 @@ export function createMock() {
     fields.push(f);
     return c.json(f, 201);
   });
+
+  app.get("/api/groups/", (c) => (adminOnly(c) ? c.json({ detail: "forbidden" }, 403) : c.json(paged(groups))));
+  app.get("/api/groups/:id/", (c) => {
+    if (adminOnly(c)) return c.json({ detail: "forbidden" }, 403);
+    const g = groups.find((x) => x.id === Number(c.req.param("id")));
+    return g ? c.json(g) : c.json({ detail: "Not found." }, 404);
+  });
+  app.post("/api/groups/", async (c) => {
+    if (adminOnly(c)) return c.json({ detail: "forbidden" }, 403);
+    const b = await c.req.json();
+    const g = { id: groups.length + 1, name: b.name, permissions: b.permissions ?? [] };
+    groups.push(g);
+    return c.json(g, 201);
+  });
+  app.post("/api/users/", async (c) => {
+    if (adminOnly(c)) return c.json({ detail: "forbidden" }, 403);
+    const b = await c.req.json();
+    if (users.some((u) => u.username === b.username)) return c.json({ username: ["A user with that username already exists."] }, 400);
+    if (String(b.password ?? "").length < 8) return c.json({ password: ["This password is too short."] }, 400);
+    const u = { id: users.length + 1, username: b.username, first_name: b.first_name ?? "", password: b.password, is_superuser: false, token: `tok-${b.username}`, groups: b.groups };
+    users.push(u);
+    return c.json({ id: u.id, username: u.username, groups: u.groups }, 201);
+  });
+  for (const kind of ["tags", "document_types", "custom_fields"]) {
+    app.patch(`/api/${kind}/:id/`, async (c) => {
+      if (adminOnly(c)) return c.json({ detail: "forbidden" }, 403);
+      const b = await c.req.json();
+      if (b.set_permissions) perms.set(`${kind}:${c.req.param("id")}`, b.set_permissions);
+      return c.json({ id: Number(c.req.param("id")) });
+    });
+  }
+  app.post("/api/documents/bulk_edit/", async (c) => {
+    const b = await c.req.json();
+    if (b.method !== "set_permissions") return c.json({ detail: "unsupported" }, 400);
+    for (const id of b.documents) perms.set(`documents:${id}`, b.parameters.set_permissions);
+    return c.json({ result: "OK" });
+  });
+  // Test helper, not part of Paperless.
+  app.get("/api/_perms/", (c) => c.json(Object.fromEntries(perms)));
 
   app.get("/api/documents/", (c) => {
     const q = c.req.query();
@@ -170,7 +214,9 @@ export function createMock() {
   app.patch("/api/documents/:id/", async (c) => {
     const d = find(c.req.param("id"));
     if (!d) return c.json({ detail: "Not found." }, 404);
-    Object.assign(d, await c.req.json());
+    const { set_permissions, ...rest } = await c.req.json();
+    if (set_permissions) perms.set(`documents:${d.id}`, set_permissions);
+    Object.assign(d, rest);
     return c.json(d);
   });
 

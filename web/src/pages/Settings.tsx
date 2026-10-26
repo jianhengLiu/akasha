@@ -1,4 +1,6 @@
 import { useState } from "react";
+import type { Signup } from "../lib/api.ts";
+import { useAsync } from "../lib/useAsync.ts";
 import { api } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
 import { useApp } from "../lib/prefs.ts";
@@ -52,6 +54,8 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         </div>
       </section>
 
+      {me.isAdmin && <PendingSignups />}
+
       {me.isAdmin && (
         <section className="mt-8 space-y-3 rounded-2xl border border-line bg-card p-4">
           <h2 className="text-xl font-bold">{t.firstSetup}</h2>
@@ -72,5 +76,49 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
         <BigButton tone="plain" onClick={logout}>{t.logout}</BigButton>
       </div>
     </Page>
+  );
+}
+
+function PendingSignups() {
+  const t = useT();
+  const { refreshMeta } = useApp();
+  const list = useAsync(() => api.signups(), []);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  async function act(s: Signup, approve: boolean) {
+    setBusy(s.id);
+    setFailed(null);
+    try {
+      if (approve) {
+        await api.approveSignup(s.id);
+        await refreshMeta();
+      } else {
+        await api.rejectSignup(s.id);
+      }
+      list.reload();
+    } catch {
+      setFailed(s.id);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="mt-8 space-y-3 rounded-2xl border border-line bg-card p-4">
+      <h2 className="text-xl font-bold">{t.pendingSignups}</h2>
+      {!!list.error && <ErrorNote />}
+      {list.data?.length === 0 && <p className="text-lg text-muted">{t.noPending}</p>}
+      {list.data?.map((s) => (
+        <div key={s.id} className="space-y-3 rounded-xl border border-line bg-paper p-3">
+          <div className="text-xl font-bold">{s.name} <span className="text-base font-normal text-muted">（{s.username}）</span></div>
+          {failed === s.id && <p className="text-lg text-danger">{t.approveFailed}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <BigButton tone="plain" disabled={busy === s.id} onClick={() => act(s, false)}>{t.reject}</BigButton>
+            <BigButton disabled={busy === s.id} onClick={() => act(s, true)}>{t.approve}</BigButton>
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }

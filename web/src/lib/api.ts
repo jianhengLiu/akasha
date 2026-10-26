@@ -24,6 +24,8 @@ export interface DocDetail extends Doc {
 
 export interface Me { id: number; username: string; displayName: string; isAdmin: boolean; ai: boolean }
 
+export interface Signup { id: string; name: string; username: string; created: string }
+
 export interface Extracted {
   title: string;
   people: number[];
@@ -61,6 +63,10 @@ const jsonInit = (method: string, body: unknown): RequestInit => ({
 
 export const api = {
   login: (username: string, password: string) => call<{ ok: true }>("/api/auth/login", jsonInit("POST", { username, password })),
+  signup: (body: { name: string; username: string; password: string }) => call<{ ok: true }>("/api/signup", jsonInit("POST", body)),
+  signups: () => call<Signup[]>("/api/signups"),
+  approveSignup: (id: string) => call<{ ok: true }>(`/api/signups/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+  rejectSignup: (id: string) => call<{ ok: true }>(`/api/signups/${encodeURIComponent(id)}`, { method: "DELETE" }),
   logout: () => call<{ ok: true }>("/api/auth/logout", { method: "POST" }),
   me: () => call<Me>("/api/me"),
   meta: () => call<Meta>("/api/meta"),

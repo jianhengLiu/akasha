@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { api, ApiError } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
 import { BigButton, Page } from "../components/ui.tsx";
+import { Signup } from "./Signup.tsx";
 
 export function Login({ onDone }: { onDone: () => void }) {
   const t = useT();
@@ -10,6 +11,7 @@ export function Login({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [signingUp, setSigningUp] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -24,6 +26,8 @@ export function Login({ onDone }: { onDone: () => void }) {
       setBusy(false);
     }
   }
+
+  if (signingUp) return <Signup onBack={() => setSigningUp(false)} />;
 
   const input = "mt-2 block min-h-14 w-full rounded-2xl border-2 border-line bg-card px-4 text-xl";
   return (
@@ -46,6 +50,9 @@ export function Login({ onDone }: { onDone: () => void }) {
           {t.login}
         </BigButton>
       </form>
+      <button onClick={() => setSigningUp(true)} className="mt-6 min-h-14 w-full text-xl text-brand underline">
+        {t.signupLink}
+      </button>
     </Page>
   );
 }
