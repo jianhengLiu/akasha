@@ -66,6 +66,9 @@ const zh = {
   feedbackThanks: "收到了，谢谢！",
   send: "发送",
   close: "关闭",
+  aiReading: "AI 正在看这张照片…",
+  aiFilled: "AI 帮你填好了，看看对不对",
+  aiFailed: "AI 没看清，请自己选一下",
 };
 
 export type Dict = typeof zh;
@@ -136,6 +139,9 @@ const en: Dict = {
   feedbackThanks: "Got it, thank you!",
   send: "Send",
   close: "Close",
+  aiReading: "AI is reading the photo…",
+  aiFilled: "AI filled this in. Please check it",
+  aiFailed: "AI couldn't read it. Please choose below",
 };
 
 export const dictionaries = { zh, en };

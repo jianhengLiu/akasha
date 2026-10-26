@@ -22,7 +22,16 @@ export interface DocDetail extends Doc {
   fileName: string | null;
 }
 
-export interface Me { id: number; username: string; displayName: string; isAdmin: boolean }
+export interface Me { id: number; username: string; displayName: string; isAdmin: boolean; ai: boolean }
+
+export interface Extracted {
+  title: string;
+  people: number[];
+  category: number | null;
+  expiry: string | null;
+  details: { label: string; value: string }[];
+  content: string;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -62,9 +71,14 @@ export const api = {
     return call<{ count: number; docs: Doc[] }>(`/api/docs?${qs}`);
   },
   doc: (id: number) => call<DocDetail>(`/api/docs/${id}`),
-  patchDoc: (id: number, patch: Partial<{ title: string; category: number | null; people: number[]; expiry: string | null }>) =>
+  patchDoc: (id: number, patch: Partial<{ title: string; category: number | null; people: number[]; expiry: string | null; content: string }>) =>
     call<DocDetail>(`/api/docs/${id}`, jsonInit("PATCH", patch)),
   upload: (form: FormData) => call<{ taskId: string }>("/api/docs", { method: "POST", body: form }),
+  extract: (image: Blob) => {
+    const form = new FormData();
+    form.append("file", image, "photo.jpg");
+    return call<Extracted>("/api/ai/extract", { method: "POST", body: form });
+  },
   feedback: (body: Record<string, string>) => call<{ ok: true; via: string }>("/api/feedback", jsonInit("POST", body)),
   task: (id: string) => call<{ status: string; docId: number | null }>(`/api/tasks/${encodeURIComponent(id)}`),
 };
