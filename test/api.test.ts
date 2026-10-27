@@ -409,3 +409,37 @@ test("uploads can be shared with chosen accounts, and the choice is remembered",
   assert.equal((await put(baba.cookie, "family")).status, 200);
   assert.equal((await (await get(`/api/docs/${docId}`, baba.cookie)).json()).share, "family");
 });
+
+test("admin can choose the AI provider, model and wire format in Settings", async () => {
+  const { config } = await import("../server/config.ts");
+  const env = { ...config };
+  Object.assign(config, { aiBaseUrl: "", aiModel: "", aiApiKey: "" });
+  const admin = await login("admin");
+  const mama = await login("mama");
+  const send = (cookie: string, method: string, path: string, body: unknown) => app.fetch(new Request(`http://x${path}`, {
+    method, headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body),
+  }));
+  try {
+    assert.equal((await (await get("/api/me", admin.cookie)).json()).ai, false);
+    assert.equal((await send(mama.cookie, "PUT", "/api/ai/settings", { model: "x" })).status, 403);
+    assert.equal((await send(admin.cookie, "PUT", "/api/ai/settings", { baseUrl: "ftp://x" })).status, 400);
+    assert.equal((await send(admin.cookie, "PUT", "/api/ai/settings", { wireApi: "grpc" })).status, 400);
+
+    const baseUrl = `${process.env.PAPERLESS_URL}/v1/`;
+    const models = await (await send(admin.cookie, "POST", "/api/ai/models", { baseUrl, key: "test-key" })).json();
+    assert.deepEqual(models.models, ["mock-mini", "mock-vision"]);
+    assert.equal((await send(admin.cookie, "PUT", "/api/ai/settings", { baseUrl, model: "mock-vision", wireApi: "chat", key: "test-key" })).status, 200);
+    const s = await (await get("/api/ai/settings", admin.cookie)).json();
+    assert.deepEqual(s, { enabled: true, baseUrl: baseUrl.replace(/\/$/, ""), model: "mock-vision", wireApi: "chat", keySet: true, keyFromEnv: false });
+    assert.equal((await send(admin.cookie, "POST", "/api/ai/models", {})).status, 200, "saved address and key work");
+
+    const form = new FormData();
+    form.append("note", "家里WiFi名称 Home-5G");
+    assert.equal((await app.fetch(new Request("http://x/api/ai/extract", { method: "POST", headers: { cookie: mama.cookie }, body: form }))).status, 200);
+    // The saved key is not sent to an address that was only typed in.
+    assert.equal((await send(admin.cookie, "POST", "/api/ai/models", { baseUrl: `${process.env.PAPERLESS_URL}/v1/../v1` })).status, 502);
+  } finally {
+    await send(admin.cookie, "PUT", "/api/ai/settings", { baseUrl: "", model: "", wireApi: "", key: "" });
+    Object.assign(config, env);
+  }
+});

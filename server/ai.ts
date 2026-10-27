@@ -6,7 +6,7 @@
 // provider and nothing is stored here.
 
 import { config } from "./config.ts";
-import { storedAiKey } from "./accounts.ts";
+import { storedAi } from "./accounts.ts";
 import type { Meta } from "./family.ts";
 
 export interface Extracted {
@@ -20,9 +20,45 @@ export interface Extracted {
   content: string;
 }
 
-// An admin may paste the key in Settings; the environment variable wins.
-const apiKey = () => config.aiApiKey || storedAiKey();
-export const aiEnabled = () => !!(config.aiBaseUrl && apiKey() && config.aiModel);
+// What an admin saved in Settings wins; the environment is the default.
+export function aiConfig() {
+  const s = storedAi();
+  return {
+    baseUrl: (s.baseUrl || config.aiBaseUrl).replace(/\/+$/, ""),
+    model: s.model || config.aiModel,
+    wireApi: (s.wireApi || config.aiWireApi) as "chat" | "responses",
+    key: s.key || config.aiApiKey,
+  };
+}
+export const aiEnabled = () => {
+  const c = aiConfig();
+  return !!(c.baseUrl && c.key && c.model);
+};
+
+export function validBaseUrl(u: string): boolean {
+  try {
+    const url = new URL(u);
+    return (url.protocol === "http:" || url.protocol === "https:") && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+// Model ids the provider offers (OpenAI-compatible GET /models). Lets an admin
+// pick one and doubles as a connection test. Unsaved values can be tried.
+export async function listModels(over: { baseUrl?: string; key?: string } = {}): Promise<string[]> {
+  const c = aiConfig();
+  const base = (over.baseUrl || c.baseUrl).replace(/\/+$/, "");
+  // The saved key only ever goes to the saved address.
+  const key = over.key || (base === c.baseUrl ? c.key : "");
+  const res = await fetch(`${base}/models`, {
+    headers: { authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) throw new AiError(`ai provider returned ${res.status} for /models`);
+  const body = await res.json() as { data?: { id?: unknown }[] };
+  return [...new Set((body.data ?? []).map((m) => m.id).filter((id): id is string => typeof id === "string"))].sort();
+}
 
 export class AiError extends Error {}
 
@@ -71,7 +107,7 @@ export function toExtracted(raw: Record<string, unknown>, meta: Meta): Extracted
 // newer Responses API (OpenAI, and Codex-style relays that only offer it).
 async function callChat(prompt: string, dataUrl?: string): Promise<string | undefined> {
   const body = await post("/chat/completions", {
-    model: config.aiModel,
+    model: aiConfig().model,
     temperature: 0,
     messages: [{
       role: "user",
@@ -86,7 +122,7 @@ async function callChat(prompt: string, dataUrl?: string): Promise<string | unde
 
 async function callResponses(prompt: string, dataUrl?: string): Promise<string | undefined> {
   const body = await post("/responses", {
-    model: config.aiModel,
+    model: aiConfig().model,
     input: [{
       role: "user",
       content: [
@@ -104,9 +140,10 @@ async function callResponses(prompt: string, dataUrl?: string): Promise<string |
 }
 
 async function post(path: string, payload: unknown): Promise<unknown> {
-  const res = await fetch(`${config.aiBaseUrl}${path}`, {
+  const c = aiConfig();
+  const res = await fetch(`${c.baseUrl}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey()}` },
+    headers: { "content-type": "application/json", authorization: `Bearer ${c.key}` },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(90_000),
   });
@@ -115,7 +152,7 @@ async function post(path: string, payload: unknown): Promise<unknown> {
 }
 
 export async function extract(input: { image: Blob } | { note: string }, meta: Meta): Promise<Extracted> {
-  const call = config.aiWireApi === "responses" ? callResponses : callChat;
+  const call = aiConfig().wireApi === "responses" ? callResponses : callChat;
   let reply: string | undefined;
   if ("image" in input) {
     const bytes = Buffer.from(await input.image.arrayBuffer());

@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
-import { addCategory, approveSignup, loadAiKey, saveAiKey, storedAiKey, syncFamilyOnce, ensureFamilyGroup, listSignups, rejectSignup, requestSignup, shareEverything, applyShare, familyGroupId, getHabit, getRoster, parseShare, refreshRoster, setHabit, shareOf } from "./accounts.ts";
+import { addCategory, approveSignup, loadAiSettings, saveAiSettings, storedAi, syncFamilyOnce, ensureFamilyGroup, listSignups, rejectSignup, requestSignup, shareEverything, applyShare, familyGroupId, getHabit, getRoster, parseShare, refreshRoster, setHabit, shareOf } from "./accounts.ts";
 import type { Share } from "./accounts.ts";
 import { listAccounts, removeCategory, removePerson, renameCategory, renamePerson, setAccountActive } from "./admin.ts";
-import { AiError, aiEnabled, extract } from "./ai.ts";
+import { AiError, aiConfig, aiEnabled, extract, listModels, validBaseUrl } from "./ai.ts";
 import { config } from "./config.ts";
 import { ensureDefaults, listDocs, loadMeta, patchDoc, toDetail } from "./family.ts";
 import { allow, submitFeedback, validate } from "./feedback.ts";
@@ -32,7 +32,7 @@ function intParam(v: string | undefined): number | undefined {
 
 export function createApp() {
   const app = new Hono<Env>();
-  const ready = loadAiKey().catch((e) => console.warn("could not load AI key:", e.message));
+  const ready = loadAiSettings().catch((e) => console.warn("could not load AI settings:", e.message));
 
   app.onError((err, c) => {
     if (err instanceof PaperlessError) {
@@ -164,23 +164,54 @@ export function createApp() {
 
   // AI settings: base URL and model come from the environment; the key may be
   // set here. The key itself is never sent back to the browser.
+  // The key itself is never sent back, only whether one is set.
   app.get("/api/ai/settings", async (c) => {
     if (!(await isAdmin(c.var.paperless))) return c.json({ error: "forbidden" }, 403);
+    const a = aiConfig();
     return c.json({
       enabled: aiEnabled(),
-      baseUrl: config.aiBaseUrl,
-      model: config.aiModel,
-      keyFromEnv: !!config.aiApiKey,
-      keySet: !!(config.aiApiKey || storedAiKey()),
+      baseUrl: a.baseUrl,
+      model: a.model,
+      wireApi: a.wireApi,
+      keySet: !!a.key,
+      keyFromEnv: !storedAi().key && !!config.aiApiKey,
     });
   });
 
   app.put("/api/ai/settings", async (c) => {
     if (!(await isAdmin(c.var.paperless))) return c.json({ error: "forbidden" }, 403);
-    const { key } = await c.req.json<{ key?: string }>().catch(() => ({}) as { key?: string });
-    if (typeof key !== "string" || key.length > 500) return c.json({ error: "invalid" }, 400);
-    await saveAiKey(key.trim());
+    const b = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+    const patch: Parameters<typeof saveAiSettings>[0] = {};
+    for (const k of ["baseUrl", "model", "key"] as const) {
+      if (b[k] === undefined) continue;
+      if (typeof b[k] !== "string" || b[k].length > 500) return c.json({ error: "invalid" }, 400);
+      patch[k] = b[k].trim();
+    }
+    if (patch.baseUrl) {
+      patch.baseUrl = patch.baseUrl.replace(/\/+$/, "");
+      if (!validBaseUrl(patch.baseUrl)) return c.json({ error: "invalid_url" }, 400);
+    }
+    if (b.wireApi !== undefined) {
+      if (b.wireApi !== "" && b.wireApi !== "chat" && b.wireApi !== "responses") return c.json({ error: "invalid" }, 400);
+      patch.wireApi = b.wireApi;
+    }
+    await saveAiSettings(patch);
     return c.json({ ok: true, enabled: aiEnabled() });
+  });
+
+  // Lists the provider's models, optionally with an address/key not saved yet.
+  app.post("/api/ai/models", async (c) => {
+    if (!(await isAdmin(c.var.paperless))) return c.json({ error: "forbidden" }, 403);
+    const b = await c.req.json<{ baseUrl?: unknown; key?: unknown }>().catch(() => ({}) as { baseUrl?: unknown; key?: unknown });
+    const baseUrl = typeof b.baseUrl === "string" ? b.baseUrl.trim() : "";
+    const key = typeof b.key === "string" ? b.key.trim() : "";
+    if (baseUrl && !validBaseUrl(baseUrl)) return c.json({ error: "invalid_url" }, 400);
+    try {
+      return c.json({ models: await listModels({ baseUrl, key }) });
+    } catch (e) {
+      console.warn("ai models failed:", e instanceof Error ? e.message : e);
+      return c.json({ error: "ai_failed" }, 502);
+    }
   });
 
   app.get("/api/accounts", async (c) => {

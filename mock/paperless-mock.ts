@@ -98,6 +98,11 @@ export function createMock() {
     return c.json({ choices: [{ message: { role: "assistant", content: "```json\n" + JSON.stringify(reply) + "\n```" } }] });
   });
 
+  app.get("/v1/models", (c) => {
+    if (c.req.header("authorization") !== "Bearer test-key") return c.json({ error: { message: "bad key" } }, 401);
+    return c.json({ object: "list", data: [{ id: "mock-vision" }, { id: "mock-mini" }] });
+  });
+
   app.post("/v1/responses", async (c) => {
     if (c.req.header("authorization") !== "Bearer test-key") return c.json({ error: { message: "bad key" } }, 401);
     const b = await c.req.json();

@@ -33,6 +33,10 @@ export interface Me { id: number; username: string; displayName: string; isAdmin
 
 export interface Account { id: number; username: string; name: string; active: boolean; isAdmin: boolean }
 
+export type WireApi = "chat" | "responses";
+
+export interface AiSettings { enabled: boolean; baseUrl: string; model: string; wireApi: WireApi; keyFromEnv: boolean; keySet: boolean }
+
 export interface Signup { id: string; name: string; username: string; created: string }
 
 export interface Extracted {
@@ -78,8 +82,10 @@ export const api = {
     call<{ ok: true }>(`/api/signups/${encodeURIComponent(id)}/approve`, jsonInit("POST", person ? { person } : {})),
   renamePerson: (id: number, name: string) => call<{ ok: true }>(`/api/people/${id}`, jsonInit("PATCH", { name })),
   removePerson: (id: number, into?: number) => call<{ ok: true }>(`/api/people/${id}${into ? `?into=${into}` : ""}`, { method: "DELETE" }),
-  aiSettings: () => call<{ enabled: boolean; baseUrl: string; model: string; keyFromEnv: boolean; keySet: boolean }>("/api/ai/settings"),
-  saveAiKey: (key: string) => call<{ ok: true; enabled: boolean }>("/api/ai/settings", jsonInit("PUT", { key })),
+  aiSettings: () => call<AiSettings>("/api/ai/settings"),
+  saveAiSettings: (patch: Partial<{ baseUrl: string; model: string; wireApi: WireApi; key: string }>) =>
+    call<{ ok: true; enabled: boolean }>("/api/ai/settings", jsonInit("PUT", patch)),
+  aiModels: (draft: { baseUrl?: string; key?: string }) => call<{ models: string[] }>("/api/ai/models", jsonInit("POST", draft)),
   renameCategory: (id: number, name: string) => call<{ ok: true }>(`/api/categories/${id}`, jsonInit("PATCH", { name })),
   removeCategory: (id: number, into?: number) => call<{ ok: true }>(`/api/categories/${id}${into ? `?into=${into}` : ""}`, { method: "DELETE" }),
   accounts: () => call<Account[]>("/api/accounts"),

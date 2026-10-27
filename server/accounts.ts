@@ -34,6 +34,8 @@ interface Store {
   familyGroupId?: number;
   signups: StoredSignup[];
   aiKey?: string;
+  // AI provider chosen in Settings; each one falls back to the environment.
+  ai?: { baseUrl?: string; model?: string; wireApi?: "chat" | "responses" };
   // Active accounts, refreshed by admins, so members can pick who sees what
   // without needing permission to list Paperless users themselves.
   roster?: Member[];
@@ -289,24 +291,36 @@ export function syncFamilyOnce(admin: Paperless) {
     });
 }
 
-// The AI key can be entered by an admin in Settings instead of the
-// environment, so it survives redeploys. Stored encrypted, kept in memory.
-let aiKeyCache = "";
-export const storedAiKey = () => aiKeyCache;
+// The AI provider (address, model, wire format, key) can be set by an admin
+// in Settings instead of the environment, so it survives redeploys and other
+// families can use their own provider. The key is stored encrypted; all of it
+// is kept in memory.
+export interface AiStored { baseUrl: string; model: string; wireApi: "" | "chat" | "responses"; key: string }
+let aiCache: AiStored = { baseUrl: "", model: "", wireApi: "", key: "" };
+export const storedAi = () => aiCache;
 
-export async function loadAiKey() {
+export async function loadAiSettings() {
   const s = await load();
+  let key = "";
   try {
-    aiKeyCache = s.aiKey ? decrypt(s.aiKey) : "";
+    key = s.aiKey ? decrypt(s.aiKey) : "";
   } catch {
-    aiKeyCache = "";
+    // AKASHA_SECRET changed; the key has to be entered again.
   }
+  aiCache = { baseUrl: s.ai?.baseUrl ?? "", model: s.ai?.model ?? "", wireApi: s.ai?.wireApi ?? "", key };
 }
 
-export async function saveAiKey(key: string) {
+// Only the fields given change; "" clears one so the environment applies again.
+export async function saveAiSettings(patch: Partial<AiStored>) {
   const s = await load();
-  if (key) s.aiKey = encrypt(key);
+  const next = { ...aiCache, ...patch };
+  if (next.key) s.aiKey = encrypt(next.key);
   else delete s.aiKey;
+  s.ai = {
+    ...(next.baseUrl ? { baseUrl: next.baseUrl } : {}),
+    ...(next.model ? { model: next.model } : {}),
+    ...(next.wireApi ? { wireApi: next.wireApi } : {}),
+  };
   await save(s);
-  aiKeyCache = key;
+  aiCache = next;
 }

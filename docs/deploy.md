@@ -47,8 +47,9 @@ for your family you need:
 3. Check it: `http://<host>:3100/api/health` should return `{"ok":true}`.
 4. Open `http://<host>:3100` and log in with the Paperless admin account. In
    **Settings**, run **First-time setup** (creates the default categories and
-   family members; edit `AKASHA_DEFAULT_*` first if you like). If you set up AI,
-   enter the API key in Settings.
+   family members; edit `AKASHA_DEFAULT_*` first if you like). For AI, fill in the
+   provider's address, API type, key and model under **AI auto-fill** in
+   Settings ("Load model list" also checks the connection).
 5. Family members tap **Request an account** on the login page; you approve
    each one in Settings and say which family member they are. Everything saved
    through Akasha is shared with the family group automatically.

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ApiError } from "../lib/api.ts";
-import type { Account, Named, Signup } from "../lib/api.ts";
+import type { Account, AiSettings as AiSettingsData, Named, Signup, WireApi } from "../lib/api.ts";
 import { useAsync } from "../lib/useAsync.ts";
 import { api } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
@@ -270,49 +270,96 @@ function Accounts() {
 function AiSettings() {
   const t = useT();
   const s = useAsync(() => api.aiSettings(), []);
+  return (
+    <section className="mt-8 space-y-4 rounded-2xl border border-line bg-card p-4">
+      <h2 className="text-xl font-bold">
+        {t.aiSettings}
+        {s.data && <span className={`ml-2 text-lg ${s.data.enabled ? "text-brand" : "text-muted"}`}>{s.data.enabled ? `✅ ${t.aiOn}` : t.aiOff}</span>}
+      </h2>
+      {!!s.error && <ErrorNote />}
+      {s.data && <AiForm initial={s.data} onSaved={s.reload} />}
+    </section>
+  );
+}
+
+function AiForm({ initial, onSaved }: { initial: AiSettingsData; onSaved: () => void }) {
+  const t = useT();
+  const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
+  const [wireApi, setWireApi] = useState<WireApi>(initial.wireApi);
   const [key, setKey] = useState("");
-  const [state, setState] = useState<"idle" | "busy" | "saved" | "error">("idle");
+  const [model, setModel] = useState(initial.model);
+  const [models, setModels] = useState<string[] | null>(null);
+  const [state, setState] = useState<"idle" | "busy" | "saved" | "error" | "models_failed">("idle");
+  const edit = <T,>(set: (v: T) => void) => (v: T) => { set(v); setState("idle"); };
+  const input = "mt-2 min-h-14 w-full rounded-xl border-2 border-line bg-paper px-3 text-xl";
+
+  async function loadModels() {
+    setState("busy");
+    try {
+      const r = await api.aiModels({ baseUrl: baseUrl.trim(), key: key.trim() });
+      setModels(r.models);
+      setState("idle");
+    } catch {
+      setModels(null);
+      setState("models_failed");
+    }
+  }
 
   async function save() {
     setState("busy");
     try {
-      await api.saveAiKey(key.trim());
+      await api.saveAiSettings({ baseUrl: baseUrl.trim(), wireApi, model: model.trim(), ...(key.trim() ? { key: key.trim() } : {}) });
       setKey("");
       setState("saved");
-      s.reload();
+      onSaved();
     } catch {
       setState("error");
     }
   }
 
   return (
-    <section className="mt-8 space-y-3 rounded-2xl border border-line bg-card p-4">
-      <h2 className="text-xl font-bold">
-        {t.aiSettings}
-        {s.data && <span className={`ml-2 text-lg ${s.data.enabled ? "text-brand" : "text-muted"}`}>{s.data.enabled ? `✅ ${t.aiOn}` : t.aiOff}</span>}
-      </h2>
-      {!!s.error && <ErrorNote />}
-      {s.data && (!s.data.baseUrl || !s.data.model) && <p className="text-base text-muted">{t.aiNoServer}</p>}
-      {s.data && <p className="text-base text-muted">{s.data.model}</p>}
-      {s.data && !s.data.keyFromEnv && (
-        <>
-          <label className="block text-lg">
-            {t.aiKey}
-            <input
-              type="password"
-              autoComplete="off"
-              value={key}
-              onChange={(e) => { setKey(e.target.value); setState("idle"); }}
-              placeholder={s.data.keySet ? "••••••••" : ""}
-              className="mt-2 min-h-14 w-full rounded-xl border-2 border-line bg-paper px-3 text-xl"
-            />
-          </label>
-          {state === "error" && <ErrorNote />}
-          <BigButton tone="plain" disabled={state === "busy" || !key.trim()} onClick={save}>
-            {state === "saved" ? `✅ ${t.aiKeySaved}` : t.save}
-          </BigButton>
-        </>
-      )}
-    </section>
+    <>
+      {!initial.enabled && <p className="text-base text-muted">{t.aiNoServer}</p>}
+      <label className="block text-lg">
+        {t.aiBaseUrl}
+        <input type="url" inputMode="url" autoComplete="off" value={baseUrl} onChange={(e) => edit(setBaseUrl)(e.target.value)}
+          placeholder="https://api.openai.com/v1" className={input} />
+      </label>
+      <div>
+        <div className="text-lg">{t.aiWireApi}</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Chip selected={wireApi === "chat"} onClick={() => edit(setWireApi)("chat")}>{t.aiWireChat}</Chip>
+          <Chip selected={wireApi === "responses"} onClick={() => edit(setWireApi)("responses")}>{t.aiWireResponses}</Chip>
+        </div>
+        <p className="mt-2 text-base text-muted">{t.aiWireHint}</p>
+      </div>
+      <label className="block text-lg">
+        {t.aiKey}
+        <input type="password" autoComplete="off" value={key} onChange={(e) => edit(setKey)(e.target.value)}
+          placeholder={initial.keySet ? "••••••••" : ""} className={input} />
+        {initial.keyFromEnv && <span className="mt-1 block text-base text-muted">{t.aiKeyFromEnv}</span>}
+      </label>
+      <div>
+        <label className="block text-lg">
+          {t.aiModel}
+          {models?.length ? (
+            <select value={model} onChange={(e) => edit(setModel)(e.target.value)} className={input}>
+              {!models.includes(model) && <option value={model}>{model || "—"}</option>}
+              {models.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          ) : (
+            <input autoComplete="off" value={model} onChange={(e) => edit(setModel)(e.target.value)} placeholder="gpt-4o" className={input} />
+          )}
+        </label>
+        <button onClick={loadModels} disabled={state === "busy" || !baseUrl.trim()} className="mt-2 min-h-12 text-lg text-brand disabled:opacity-50">
+          🔄 {t.aiLoadModels}
+        </button>
+        {state === "models_failed" && <p className="text-lg text-danger">{t.aiModelsFailed}</p>}
+      </div>
+      {state === "error" && <ErrorNote />}
+      <BigButton tone="plain" disabled={state === "busy" || !baseUrl.trim() || !model.trim()} onClick={save}>
+        {state === "saved" ? `✅ ${t.aiKeySaved}` : t.save}
+      </BigButton>
+    </>
   );
 }
